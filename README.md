@@ -1,1 +1,1 @@
-# web-rtc-signaling-server
+Signalizačný server
