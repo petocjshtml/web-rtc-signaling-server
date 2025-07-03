@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChatApp</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    video {
+      position: absolute;
+      object-fit: cover;
+    }
+  </style>
+</head>
+<body>
+  <video id="localVideo" autoplay muted playsinline style="background-color: red;"></video>
+  <video id="remoteVideo" autoplay playsinline style="background-color: blue;"></video>
+
+  <script>
+    var pc; 
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const pc_config = { 
+            iceServers: [
+                { urls: "turn:relay1.expressturn.com:3480", username: "000000002066403972", credential: "Y522l/JHUxKJKWh3iC69214MvD4="  },
+                { urls: 'stun:stun.l.google.com:19302' }
+            ] 
+        };
+
+    // Layout logic
+    function updateLayout() {
+      const isLandscape = window.innerWidth > window.innerHeight;
+      if (isLandscape) {
+        // Na šírku (vedľa seba)
+        localVideo.style.width = "50vw";
+        localVideo.style.height = "100vh";
+        localVideo.style.left = "0";
+        localVideo.style.top = "0";
+
+        remoteVideo.style.width = "50vw";
+        remoteVideo.style.height = "100vh";
+        remoteVideo.style.left = "50vw";
+        remoteVideo.style.top = "0";
+      } else {
+        // Na výšku (pod seba)
+        localVideo.style.width = "100vw";
+        localVideo.style.height = "50vh";
+        localVideo.style.left = "0";
+        localVideo.style.top = "0";
+
+        remoteVideo.style.width = "100vw";
+        remoteVideo.style.height = "50vh";
+        remoteVideo.style.left = "0";
+        remoteVideo.style.top = "50vh";
+      }
+    }
+    window.addEventListener('resize', updateLayout);
+    window.addEventListener('orientationchange', updateLayout);
+    window.addEventListener('load', updateLayout);
+
+    //WebRtc logic
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {   
+        localVideo.srcObject = stream;
+        const socket = new WebSocket('ws://localhost:3000');
+        socket.onopen = () => {};  
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            switch (data.type) {
+                case "start-signaling":
+                        pc = new RTCPeerConnection(pc_config); 
+                        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+                        pc.onicecandidate = e => {
+                            if (e.candidate) {
+                                socket.send(JSON.stringify({ type: 'ice-candidate', candidate: e.candidate }));
+                            }
+                        };
+                        pc.ontrack = e => {
+                            remoteVideo.srcObject = e.streams[0];
+                        };
+                        pc.createOffer().then(offer => {
+                            return pc.setLocalDescription(offer);
+                        }).then(() => {
+                            socket.send(JSON.stringify({ type: 'offer', sdp: pc.localDescription }));
+                        }).catch(error => {
+                            console.error('Error creating offer:', error);
+                        });
+                    break;
+                case "ice-candidate":
+                    const candidate = new RTCIceCandidate(data.candidate);
+                    pc.addIceCandidate(candidate).catch(error => {
+                        console.error('Error adding received ice candidate:', error);
+                    });
+                    break;
+                case "offer":
+                    pc = new RTCPeerConnection(pc_config); 
+                    pc.onicecandidate = e => {
+                            if (e.candidate) {
+                                socket.send(JSON.stringify({ type: 'ice-candidate', candidate: e.candidate }));
+                            }
+                    };
+                    pc.ontrack = e => {
+                        remoteVideo.srcObject = e.streams[0];
+                    };
+                    pc.setRemoteDescription(new RTCSessionDescription(data.sdp)).then(() => {    
+                        stream.getTracks().forEach(track => pc.addTrack(track, stream));             
+                        return pc.createAnswer();
+                    }).then(answer => {
+                        return pc.setLocalDescription(answer);
+                    }).then(() => {
+                        socket.send(JSON.stringify({ type: 'answer', sdp: pc.localDescription }));
+                    }).catch(error => {
+                        console.error('Error handling offer:', error);
+                    });
+                    break;
+                case "answer":
+                    pc.setRemoteDescription(new RTCSessionDescription(data.sdp)).catch(error => {
+                        console.error('Error setting remote description:', error);
+                    });
+                    break;
+                default:
+                    break;
+            }
+            console.log('📨 Správa od servera:', data);
+        };
+        socket.onerror = (error) => {     
+            alert('Nastala chyba pri pripojení ws serveru: ' + error.message);
+        };
+        socket.onclose = () => {};
+    }).catch(error => {
+      alert('Error accessing media devices: '+ error.message);
+    });
+  </script>
+</body>
+</html>
