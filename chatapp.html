@@ -67,7 +67,7 @@
     //WebRtc logic
     navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {   
         localVideo.srcObject = stream;
-        const socket = new WebSocket('ws://localhost:3000');
+        const socket = new WebSocket('wss://web-rtc-signaling-server-st2m.onrender.com');
         socket.onopen = () => {};  
         socket.onmessage = (event) => {
             const data = JSON.parse(event.data);
