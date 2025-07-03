@@ -1,1 +1,1 @@
-Signalizačný server
+Signalizácia
