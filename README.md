@@ -1,1 +1,1 @@
-# Ukážkový Web Rtc server pre signalizáciu
+# Web Rtc server pre signalizáciu a appka pre vzdialený videohovor
